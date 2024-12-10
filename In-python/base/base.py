@@ -1,3 +1,5 @@
+import json
+
 from playwright.sync_api import sync_playwright, Browser, Page, Playwright
 from requests import HTTPError
 
@@ -9,19 +11,43 @@ class Base:
         self.page: Page | None = None
         self.page_url = ""
         self.check_http_status = False
-        self.setup()
+        self.capture_request = True
+        self.context = None
         self.cache = {
 
         }
+        self.capture_target_urls = []
+        self.capture_request_list = {}
+        self.last_headers = None
+
+    def store_request(self, request):
+        url = request.url
+        if self.host not in url:
+            return
+        for u in self.capture_target_urls:
+            if u in url:
+                self.capture_request_list[u] = url.split("?")[1]
+                self.last_headers = request.headers
+                if request.post_data is not None:
+                    self.capture_request_list[u] = json.loads(request.post_data)
+
+    def request_process(self, request):
+        self.store_request(request)
+        if self.check_http_status:
+            self.raise_for_status(request)
 
     def setup(self):
-        if self.check_http_status:
-            self.page.on("request", self.raise_for_status)
+        self.page.on("request", self.request_process)
 
     def configure(self, p):
         self.playwright: Playwright = p
         self.browser: Browser = self.playwright.chromium.launch(headless=False)
-        self.page: Page = self.browser.new_page()
+        if self.context_storage is not None:
+             self.context = self.browser.new_context(storage_state=self.context_storage)
+        else:
+            self.context = self.browser.new_context()
+        self.page: Page = self.context.new_page()
+        self.setup()
 
     def raise_for_status(self, request)-> None:
         def on_response(response):
