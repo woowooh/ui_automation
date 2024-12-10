@@ -18,35 +18,40 @@ class PickJob(Base):
         self.session = requests.Session()
         self.record_status = set()
 
-
     def run(self):
         page = self.page
-        import time
         time.sleep(1)
         page.get_by_role("link", name="BOSS直聘", exact=True).click()
         page.get_by_role("link", name="推荐").click()
         tag_list = ["测试开发（上海）", "测试工程师（上海）", "自动化测试（上海）"]
         for tag in tag_list:
-            self.get_available_jobs(tag)
+            self.pick_available_jobs(tag)
 
-    def get_job_list(self, tag):
-        import time
+    def pick_available_jobs(self, tag):
         time.sleep(1)
         page = self.page
         page.get_by_role("link", name=tag).click()
+        encrypt_expect_id = self.list_args_from_history()
+        for i in range(1, 6):
+            has_more, job_list = self.get_job_list(i, encrypt_expect_id)
+            for job in job_list:
+                security_id = job["securityId"]
+                lid = job["lid"]
+                job_d = self.get_job_detail(security_id, lid)
+                self.check_job_want(job_d)
+            if not has_more:
+                break
 
+    def list_args_from_history(self):
         url_data = self.capture_request_list[BossPo.job_list_url]
         target_k = "encryptExpectId"
         for args_kv in url_data.split("&"):
             if target_k in args_kv:
                 v = args_kv.split("=")[1]
-        encryptExpectId = v
-        for i in range(1, 6):
-            has_more = self.do_get_job_list(i, encryptExpectId)
-            if not has_more:
-                break
+        encrypt_expect_id = v
+        return encrypt_expect_id
 
-    def do_get_job_list(self, offset, encryptExpectId):
+    def get_job_list(self, offset, encrypt_expect_id):
         time.sleep(1)
         page_num = offset
         params = {
@@ -59,7 +64,7 @@ class PickJob(Base):
             "scale": "",
             "salary": "",
             "jobType": "",
-            "encryptExpectId": encryptExpectId,
+            "encryptExpectId": encrypt_expect_id,
             "page": page_num,
             "pageSize": 15
         }
@@ -70,15 +75,11 @@ class PickJob(Base):
         result_d = response.json()
         has_more = result_d["zpData"]["hasMore"]
         job_list = result_d["zpData"]["jobList"]
-        for job in job_list:
-            security_id = job["securityId"]
-            lid = job["lid"]
-            self.get_job_detail(security_id, lid)
-        return has_more
+        return has_more, job_list
 
     def get_job_detail(self, security_id, lid):
         time.sleep(1)
-        self.do_get_job_detail(security_id, lid)
+        return self.do_get_job_detail(security_id, lid)
 
     def do_get_job_detail(self, security_id, lid):
         params = {
@@ -88,12 +89,9 @@ class PickJob(Base):
         cookies = self.context.cookies()
         response = self.session.get(BossPo.job_detail_url, headers=self.last_headers, params=params, cookies={cookie['name']: cookie['value'] for cookie in cookies})
         job_d = response.json()
-        self.check_job_want(job_d)
+        return job_d
 
-    def get_available_jobs(self, tag):
-        self.get_job_list(tag)
-
-    def do_tik_boss(self, security_id, lid, job_id):
+    def do_pick_job(self, security_id, lid, job_id):
         params = {
             "securityId": security_id,
             "lid": lid,
@@ -132,13 +130,14 @@ class PickJob(Base):
                 if active_time_desc in ["3日内活跃", "刚刚活跃"]:
                     p = f"{BossPo.job_detail_url}?securityId={security_id}&lid={lid}"
                     self.result.append(p)
-                    self.do_tik_boss(security_id, lid, encrypt_id)
+                    self.do_pick_job(security_id, lid, encrypt_id)
 
 
 def _main():
     p = PickJob()
     p.main()
     print("\n".join(p.result))
+    print(p.record_status)
 
 
 _main()
