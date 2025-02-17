@@ -1,28 +1,27 @@
 import json
+import time
 
-from playwright.sync_api import sync_playwright, Browser, Page, Playwright
+from playwright.sync_api import Browser, Page, sync_playwright
 from requests import HTTPError
 
 
-class Base:
-    def __init__(self):
-        self.playwright: Playwright | None = None
-        self.browser: Browser | None = None
+class BasePage:
+    def __init__(self, b: Browser):
+        self.browser: Browser | None = b
         self.page: Page | None = None
         self.page_url = ""
-        self.check_http_status = False
+        self.check_http_status = True
         self.capture_request = True
         self.context = None
-        self.cache = {
-
-        }
         self.capture_target_urls = []
         self.capture_request_list = {}
         self.last_headers = None
+        self.host = None
+        self.context_storage: str | None = None
 
     def store_request(self, request):
         url = request.url
-        if self.host not in url:
+        if self.host and (self.host not in url):
             return
         for u in self.capture_target_urls:
             if u in url:
@@ -39,9 +38,7 @@ class Base:
     def setup(self):
         self.page.on("request", self.request_process)
 
-    def configure(self, p):
-        self.playwright: Playwright = p
-        self.browser: Browser = self.playwright.chromium.launch(headless=False)
+    def configure_storage(self):
         if self.context_storage is not None:
              self.context = self.browser.new_context(storage_state=self.context_storage)
         else:
@@ -57,18 +54,20 @@ class Base:
             elif 500 <= status_code < 600:
                 raise HTTPError(f"Server Error: {status_code} - {response.status_text} for URL: {response.url}")
 
-        request.continue_().then(on_response)
+        response = request.response()
+        if response:
+            on_response(response)
 
     def set_page_url(self, p):
         self.page_url = p
 
     def fill(self, css_tag: str, value):
-        e = self.locator_from_cache(css_tag)
+        e = self.page.locator(css_tag)
         e.fill(value)
         return e
 
     def type(self, css_tag: str, value):
-        e = self.locator_from_cache(css_tag)
+        e = self.page.locator(css_tag)
         e.type(value)
         return e
 
@@ -76,36 +75,26 @@ class Base:
         self.page.keyboard.press('Enter')
 
     def press(self, css_tag, v):
-        e = self.locator_from_cache(css_tag)
+        e = self.page.locator(css_tag)
         e.press(v)
         return e
 
     def enter(self, css_tag):
-        e = self.locator_from_cache(css_tag)
+        e = self.page.locator(css_tag)
         e.press("Enter")
         return e
 
     def click(self, css_tag):
-        e = self.locator_from_cache(css_tag)
+        e = self.page.locator(css_tag)
         e.click()
         return e
 
-    def locator_from_cache(self, css_tag):
-        if css_tag in self.cache:
-            e = self.cache[css_tag]
-        else:
-            e = self.page.locator(css_tag)
-            self.cache[css_tag] = e
+    def click_text(self, css_tag, index=None):
+        e = self.page.get_by_text(css_tag)
+        if index is not None:
+            e = e.nth(index)
+        e.click()
         return e
-
-    def run(self):
-        pass
-
-    def before_run(self):
-        pass
-
-    def after_run(self):
-        self.browser.close()
 
     def wait_until(self, selector, timeout=10000):
         try:
@@ -114,20 +103,16 @@ class Base:
         except TimeoutError:
             raise TimeoutError(f"Element with selector '{selector}' did not appear within {timeout} ms")
 
-    def main(self):
-        with sync_playwright() as p:
-            self.configure(p)
-            self.before_run()
-            self.page.goto(self.page_url)
-            self.run()
-            self.after_run()
-
 
 def _main():
-    b = Base()
-    p = "p"
-    b.set_page_url(p)
-    b.main()
+    with sync_playwright() as p:
+        browser: Browser = p.chromium.launch(headless=False)
+        b = BasePage(browser)
+        p = "https://www.baidu.com"
+        b.set_page_url(p)
+        b.configure_storage()
+        b.page.goto(p)
+        b.click_text("《哪吒2》总票房突破120亿", 0)
 
 
 if __name__ == "__main__":
