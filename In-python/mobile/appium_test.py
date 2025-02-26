@@ -23,8 +23,6 @@ options = UiAutomator2Options().load_capabilities(desired_caps)
 driver = webdriver.Remote('http://localhost:4723', options=options)
 
 try:
-    # 在这里可以添加具体的测试操作，例如查找元素、点击按钮等
-    # 示例：等待 5 秒
     import time
     time.sleep(5)
 
