@@ -1,5 +1,4 @@
 import json
-import time
 
 from playwright.sync_api import Browser, Page, sync_playwright
 from requests import HTTPError

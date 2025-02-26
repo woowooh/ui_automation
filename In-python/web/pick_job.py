@@ -3,8 +3,8 @@ import copy
 
 import requests
 
-from base.base import Base
-from po.boss_po import BossPo
+from web.base import Base
+from web.po.boss_po import BossPo
 
 
 class PickJob(Base):

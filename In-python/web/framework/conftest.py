@@ -1,7 +1,7 @@
 import pytest
 from playwright.sync_api import sync_playwright
 
-from base.base import BasePage
+from web.base.base import BasePage
 
 
 @pytest.fixture(scope="session")
